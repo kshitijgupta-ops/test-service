@@ -1,0 +1,14 @@
+# Secrets
+.env
+test.py
+
+# Generated artifacts
+vector-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.DS_Store
