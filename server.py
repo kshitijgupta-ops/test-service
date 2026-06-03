@@ -1,44 +1,61 @@
 from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_qdrant import QdrantVectorStore
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from qdrant_client import QdrantClient
 import os
 from dotenv import load_dotenv
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI()
 
-# Load embeddings using your TF deployed model
+# ─────────────────────────────────────
+# EMBEDDINGS (unchanged)
+# ─────────────────────────────────────
 embeddings = OpenAIEmbeddings(
     model=os.environ.get("EMBEDDING_MODEL", "openai-main/text-embedding-3-small"),
-    base_url=os.environ["BASE_URL"],   # full Gateway Base URL (e.g. https://<host>/api/llm)
-    api_key=os.environ["EMBEDDING_API_KEY"],      # store as env var
+    base_url=os.environ["BASE_URL"],
+    api_key=os.environ["EMBEDDING_API_KEY"],
     default_headers={
         "X-TFY-METADATA": "{}",
         "X-TFY-LOGGING-CONFIG": '{"enabled": true}',
     },
-    # Gateway handles tokenization; don't let langchain pre-tokenize into token IDs
     check_embedding_ctx_length=False,
 )
 
-if os.environ.get("ENV", "staging") == "dev":
-    # local paths for development, resolved relative to this script
-    vector_store_path = os.path.join(os.path.dirname(__file__), "vector-store")
-else:
-    vector_store_path = "/mnt/rag/vector-store"
+# ─────────────────────────────────────
+# QDRANT — replaces FAISS.load_local
+# ─────────────────────────────────────
+QDRANT_HOST = os.environ.get("QDRANT_HOST", "ml.tfy-eo.truefoundry.cloud")
+QDRANT_PATH = os.environ.get("QDRANT_PATH", "qdrant-vectordb-kshitij-test")
+QDRANT_URL        = "https://"+QDRANT_HOST+"/"+QDRANT_PATH
+QDRANT_COLLECTION = os.environ.get("QDRANT_COLLECTION", "ipl-docs")
 
-# Load vector store from mounted volume
-vectorstore = FAISS.load_local(
-    vector_store_path,
-    embeddings,
-    allow_dangerous_deserialization=True
+client = QdrantClient(
+    host=QDRANT_HOST,
+    port=443,
+    https=True,
+    prefix=QDRANT_PATH,
+    prefer_grpc=False,
+    check_compatibility=False,
+    timeout=30,
 )
 
-# LLM using your exact code
+# No load_local needed — Qdrant is always live
+vectorstore = QdrantVectorStore(
+    client=client,
+    collection_name=QDRANT_COLLECTION,
+    embedding=embeddings,
+)
+
+# ─────────────────────────────────────
+# LLM (unchanged)
+# ─────────────────────────────────────
 llm = ChatOpenAI(
     model="openai-main/gpt-5",
     api_key=os.environ["LLM_API_KEY"],
@@ -49,6 +66,9 @@ llm = ChatOpenAI(
     },
 )
 
+# ─────────────────────────────────────
+# SCHEMAS (unchanged)
+# ─────────────────────────────────────
 class Query(BaseModel):
     question: str
 
@@ -65,16 +85,18 @@ class RagAnswer(BaseModel):
     additional_info: Optional[str] = Field(default=None, description="Any extra relevant details found in the context; null if none")
 
 
-# Ask the model to return data matching the RagAnswer schema (reliable JSON)
 structured_llm = llm.with_structured_output(RagAnswer)
 
 
+# ─────────────────────────────────────
+# ENDPOINTS
+# ─────────────────────────────────────
 @app.post("/rag")
 def rag_query(query: Query):
-    # Retrieve relevant chunks from vector store
+    # Retrieve relevant chunks from Qdrant
     docs = vectorstore.similarity_search(query.question, k=6)
 
-    # Build context with labelled sources so the model can cite precisely
+    # Build context with labelled sources (unchanged)
     context_blocks = []
     for i, d in enumerate(docs, start=1):
         src = os.path.basename(d.metadata.get("source", "unknown"))
@@ -99,6 +121,20 @@ def rag_query(query: Query):
     except Exception as e:
         return {"error": str(e)}
 
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # Also verify Qdrant connection is alive
+    try:
+        collections = [c.name for c in client.get_collections().collections]
+        return {
+            "status": "ok",
+            "qdrant": "connected",
+            "collections": collections
+        }
+    except Exception as e:
+        return {
+            "status": "ok",
+            "qdrant": "unreachable",
+            "error": str(e)
+        }

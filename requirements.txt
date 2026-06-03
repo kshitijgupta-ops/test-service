@@ -3,6 +3,7 @@ uvicorn
 langchain
 langchain-community
 langchain-openai
-faiss-cpu
+langchain-qdrant
+qdrant-client
 openai
 python-dotenv
