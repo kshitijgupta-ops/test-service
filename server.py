@@ -15,7 +15,7 @@ app = FastAPI()
 # Load embeddings using your TF deployed model
 embeddings = OpenAIEmbeddings(
     model=os.environ.get("EMBEDDING_MODEL", "openai-main/text-embedding-3-small"),
-    base_url=os.environ["EMBEDDING_BASE_URL"],   # full Gateway Base URL (e.g. https://<host>/api/llm)
+    base_url=os.environ["BASE_URL"],   # full Gateway Base URL (e.g. https://<host>/api/llm)
     api_key=os.environ["EMBEDDING_API_KEY"],      # store as env var
     default_headers={
         "X-TFY-METADATA": "{}",
@@ -42,7 +42,7 @@ vectorstore = FAISS.load_local(
 llm = ChatOpenAI(
     model="openai-main/gpt-5",
     api_key=os.environ["LLM_API_KEY"],
-    base_url=os.environ["LLM_BASE_URL"],
+    base_url=os.environ["BASE_URL"],
     default_headers={
         "X-TFY-METADATA": "{}",
         "X-TFY-LOGGING-CONFIG": '{"enabled": true}',
