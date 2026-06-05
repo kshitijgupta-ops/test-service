@@ -63,7 +63,8 @@ llm = ChatOpenAI(
     default_headers={
         "X-TFY-METADATA": "{}",
         "X-TFY-LOGGING-CONFIG": '{"enabled": true}',
-        "X-TFY-GUARDRAILS": '{"llm_input_guardrails": ["rag-guardrails/pii-detection"], "llm_output_guardrails": ["rag-guardrails/pii-detection"]}',
+        "X-TFY-GUARDRAILS": '{"llm_input_guardrails": ["guardrails-ai/guardrails-ai-profanity-output"], "llm_output_guardrails": ["guardrails-ai/guardrails-ai-profanity-output"]}',
+
     },
 )
 
