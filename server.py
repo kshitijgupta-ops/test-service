@@ -57,7 +57,7 @@ vectorstore = QdrantVectorStore(
 # LLM (unchanged)
 # ─────────────────────────────────────
 llm = ChatOpenAI(
-    model="production-model/prod-model",
+    model="openai-main/gpt-5",
     api_key=os.environ["LLM_API_KEY"],
     base_url=os.environ["BASE_URL"],
     default_headers={
